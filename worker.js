@@ -111,23 +111,30 @@ self.addEventListener('message', async (event) => {
                 ];
             }
 
-            const result = await generator(messages, {
+            const fullPrompt = generator.tokenizer.apply_chat_template(messages, {
+                tokenize: false,
+                add_generation_prompt: true,
+            });
+
+            const result = await generator(fullPrompt, {
                 max_new_tokens: 3500,
-                temperature: 0.2,
-                do_sample: true,
+                do_sample: false, // Critical to avoid WebGPU sampling hangs
+                repetition_penalty: 1.1,
+                return_full_text: false,
+                stop_sequences: ["<turn|>", "<channel|>", "<eos>", "<|turn|>"],
                 callback_function: (beams) => {
                     const decodedText = generator.tokenizer.decode(beams[0].output_token_ids, {
                         skip_special_tokens: true,
                     });
                     
-                    // Solo emitimos los chunks si es la fase de diseño para no saturar con el JSON
                     if (action === 'generate_design') {
-                        // Limpiamos los roles del template si se filtraron
                         let cleanText = decodedText;
                         const markerIndex = cleanText.lastIndexOf('model\n');
                         if (markerIndex !== -1 && markerIndex < 50) {
                              cleanText = cleanText.substring(markerIndex + 6);
                         }
+                        // Cleanup leaked markers
+                        cleanText = cleanText.replace(/<\|turn\|>model\n/g, '').replace(/<turn\|>/g, '');
                         self.postMessage({ status: 'chunk', action: action, result: cleanText });
                     }
                 }
