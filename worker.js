@@ -1,8 +1,9 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0/dist/transformers.min.js';
 
-// Optimizar para WebGPU local
+// Configure environment
 env.allowLocalModels = false;
-env.backends.onnx.wasm.numThreads = 1;
+env.useBrowserCache = true;
+env.backends.onnx.wasm.proxy = false;
 
 // Ocultar la advertencia irrelevante de 'hub.js' sobre content-length
 const originalWarn = console.warn;
@@ -57,9 +58,16 @@ self.addEventListener('message', async (event) => {
             
             generator = await pipeline('text-generation', modelName, {
                 device: 'webgpu',
-                dtype: 'q4f16',
+                dtype: 'q4',
                 progress_callback: (data) => {
-                    if (data.status === 'downloading') {
+                    if (data.status === 'progress') {
+                        // The older syntax for progress
+                        self.postMessage({ 
+                            status: 'progress', 
+                            message: `Cargando modelo...`,
+                            progress: data.progress !== undefined ? data.progress : ((data.loaded / data.total) * 100)
+                        });
+                    } else if (data.status === 'downloading') {
                         const progress = data.total ? (data.loaded / data.total) * 100 : 0;
                         self.postMessage({ 
                             status: 'progress', 
@@ -72,6 +80,10 @@ self.addEventListener('message', async (event) => {
                 }
             });
             
+            // Warmup
+            self.postMessage({ status: 'progress', message: 'Calentando GPU (Compilando shaders)...' });
+            await generator('warmup', { max_new_tokens: 1 });
+
             self.postMessage({ status: 'loaded' });
         } catch (error) {
             self.postMessage({ status: 'error', error: error.message });
