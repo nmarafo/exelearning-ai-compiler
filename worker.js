@@ -4,6 +4,13 @@ import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transfo
 env.allowLocalModels = false;
 env.backends.onnx.wasm.numThreads = 1;
 
+// Ocultar la advertencia irrelevante de 'hub.js' sobre content-length
+const originalWarn = console.warn;
+console.warn = function(...args) {
+    if (typeof args[0] === 'string' && args[0].includes('Unable to determine content-length')) return;
+    originalWarn.apply(console, args);
+};
+
 let generator = null;
 
 const SYSTEM_PROMPT = `Eres un Diseñador Instruccional y Arquitecto de Software especializado en eXeLearning v4 y metodologías LOMLOE. 
