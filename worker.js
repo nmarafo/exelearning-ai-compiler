@@ -117,7 +117,7 @@ self.addEventListener('message', async (event) => {
             });
 
             const result = await generator(fullPrompt, {
-                max_new_tokens: 3500,
+                max_new_tokens: action === 'generate_design' ? 1500 : 2500,
                 do_sample: false, // Critical to avoid WebGPU sampling hangs
                 repetition_penalty: 1.1,
                 return_full_text: false,
