@@ -61,6 +61,18 @@ document.addEventListener('DOMContentLoaded', () => {
             progressContainer.style.display = 'none';
         }
 
+        if (data.status === 'chunk') {
+            if (data.action === 'generate_design') {
+                generationSpinner.style.display = 'none';
+                designContainer.style.display = 'block';
+                btnCompile.disabled = true;
+                btnCompile.innerHTML = 'IA Escribiendo...';
+                designEditor.value = data.result;
+                // Auto-scroll al final del textarea
+                designEditor.scrollTop = designEditor.scrollHeight;
+            }
+        }
+
         if (data.status === 'complete') {
             if (data.action === 'generate_design') {
                 generationSpinner.style.display = 'none';

@@ -114,10 +114,26 @@ self.addEventListener('message', async (event) => {
             const result = await generator(messages, {
                 max_new_tokens: 3500,
                 temperature: 0.2,
-                do_sample: true
+                do_sample: true,
+                callback_function: (beams) => {
+                    const decodedText = generator.tokenizer.decode(beams[0].output_token_ids, {
+                        skip_special_tokens: true,
+                    });
+                    
+                    // Solo emitimos los chunks si es la fase de diseño para no saturar con el JSON
+                    if (action === 'generate_design') {
+                        // Limpiamos los roles del template si se filtraron
+                        let cleanText = decodedText;
+                        const markerIndex = cleanText.lastIndexOf('model\n');
+                        if (markerIndex !== -1 && markerIndex < 50) {
+                             cleanText = cleanText.substring(markerIndex + 6);
+                        }
+                        self.postMessage({ status: 'chunk', action: action, result: cleanText });
+                    }
+                }
             });
 
-            // Extraer el texto generado
+            // Extraer el texto generado final
             let generatedText = result[0].generated_text;
             if (Array.isArray(generatedText)) {
                 generatedText = generatedText[generatedText.length - 1].content;
