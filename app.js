@@ -27,6 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentProjectBlob = null;
     let sessionCount = 1;
     let accumulatedDesign = '';
+    
+    // Timing variables
+    let startTime = 0;
+    let firstTokenTime = 0;
 
     // Inicializar modelo al cambiar selección
     modelSelect.addEventListener('change', () => {
@@ -66,9 +70,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (data.status === 'chunk') {
+            if (!firstTokenTime) {
+                firstTokenTime = performance.now();
+                const analysisTime = ((firstTokenTime - startTime) / 1000).toFixed(1);
+                document.getElementById('time-analysis').textContent = analysisTime;
+            }
+
             if (data.action === 'generate_design') {
                 generationSpinner.style.display = 'none';
                 designContainer.style.display = 'block';
+                document.getElementById('timing-stats').style.display = 'flex';
+                
                 btnCompile.disabled = true;
                 btnAddSession.disabled = true;
                 btnCompile.innerHTML = 'IA Escribiendo...';
@@ -83,6 +95,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (data.status === 'complete') {
+            const endTime = performance.now();
+            if (!firstTokenTime) firstTokenTime = endTime; // En caso de que no haya habido chunks
+            
+            const analysisTime = ((firstTokenTime - startTime) / 1000).toFixed(1);
+            const genTime = ((endTime - firstTokenTime) / 1000).toFixed(1);
+            const totalTime = ((endTime - startTime) / 1000).toFixed(1);
+            
+            document.getElementById('time-analysis').textContent = analysisTime;
+            document.getElementById('time-generation').textContent = genTime;
+            document.getElementById('time-total').textContent = totalTime;
+            document.getElementById('timing-stats').style.display = 'flex';
+
             if (data.action === 'generate_design') {
                 generationSpinner.style.display = 'none';
                 designContainer.style.display = 'block';
@@ -147,6 +171,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = saInput.value.trim();
         if (!text) return alert('Por favor, introduce el fragmento de la Situación de Aprendizaje.');
         
+        startTime = performance.now();
+        firstTokenTime = 0;
+        document.getElementById('timing-stats').style.display = 'none';
+
         btnGenerate.disabled = true;
         outputSection.style.display = 'block';
         generationSpinner.style.display = 'flex';
@@ -182,6 +210,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const designText = designEditor.value.trim();
         if (!designText) return alert('El diseño no puede estar vacío.');
         
+        startTime = performance.now();
+        firstTokenTime = 0;
+        document.getElementById('timing-stats').style.display = 'none';
+
         btnCompile.disabled = true;
         btnAddSession.disabled = true;
         btnCompile.innerHTML = 'Generando JSON de compilación...';
