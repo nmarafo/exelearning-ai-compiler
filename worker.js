@@ -15,14 +15,15 @@ console.warn = function(...args) {
 let generator = null;
 
 const SYSTEM_PROMPT_DESIGN = `Eres un Diseñador Instruccional experto en eXeLearning v4 y metodologías LOMLOE. 
-Se te proporcionará una Situación de Aprendizaje (SA). 
+Se te proporcionará un FRAGMENTO o una SESIÓN ESPECÍFICA de una Situación de Aprendizaje (SA). 
 Tienes a tu disposición estos iDevices: text, casestudy, digcompedu, download-source-file, external-website, image-gallery, udl-content, checklist, form, guess, interactive-video, progress-report, select-media-files, rubric.
 
-Tu tarea es generar el diseño pedagógico detallado en formato Markdown.
+Tu tarea es generar el diseño pedagógico detallado EXCLUSIVAMENTE para la sesión proporcionada, en formato Markdown.
 DEBES INCLUIR:
-1. Árbol de Navegación propuesto.
+1. Árbol de Navegación propuesto (solo para esta sesión).
 2. Orientaciones para el Docente (justificando los iDevices elegidos según los saberes).
 3. Guía paso a paso para el alumno (mencionando explícitamente los nombres técnicos de los iDevices como 'Caso Práctico', 'Adivina', 'Rúbrica', etc.).
+NO generes introducciones genéricas del proyecto entero, ve directo al grano con esta sesión.
 No generes ningún código JSON, solo el texto Markdown.`;
 
 const SYSTEM_PROMPT_JSON = `Eres un Arquitecto de Software especializado en eXeLearning v4.
@@ -102,12 +103,12 @@ self.addEventListener('message', async (event) => {
             if (action === 'generate_design') {
                 messages = [
                     { role: "system", content: SYSTEM_PROMPT_DESIGN },
-                    { role: "user", content: "Genera el diseño para la siguiente SA:\n\n" + text }
+                    { role: "user", content: "Genera el diseño para la siguiente sesión/fragmento de SA:\n\n" + text }
                 ];
             } else {
                 messages = [
                     { role: "system", content: SYSTEM_PROMPT_JSON },
-                    { role: "user", content: "Genera el JSON estricto para este diseño aprobado:\n\n" + designText }
+                    { role: "user", content: "Genera el JSON estricto compilando TODAS estas sesiones juntas:\n\n" + designText }
                 ];
             }
 
@@ -117,7 +118,7 @@ self.addEventListener('message', async (event) => {
             });
 
             const result = await generator(fullPrompt, {
-                max_new_tokens: action === 'generate_design' ? 1500 : 2500,
+                max_new_tokens: action === 'generate_design' ? 800 : 3500,
                 do_sample: false, // Critical to avoid WebGPU sampling hangs
                 repetition_penalty: 1.1,
                 return_full_text: false,

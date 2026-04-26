@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBar = document.getElementById('progress-bar');
     const progressText = document.getElementById('progress-text');
     
+    const saInputLabel = document.getElementById('sa-input-label');
     const saInput = document.getElementById('sa-input');
     const btnGenerate = document.getElementById('btn-generate');
     
@@ -16,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const spinnerText = document.getElementById('spinner-text');
     const designContainer = document.getElementById('design-container');
     const designEditor = document.getElementById('design-editor');
+    const btnAddSession = document.getElementById('btn-add-session');
     const btnCompile = document.getElementById('btn-compile');
     const btnDownload = document.getElementById('btn-download');
     const compileError = document.getElementById('compile-error');
@@ -23,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let worker = new Worker('worker.js', { type: 'module' });
     let isModelLoaded = false;
     let currentProjectBlob = null;
+    let sessionCount = 1;
+    let accumulatedDesign = '';
 
     // Inicializar modelo al cambiar selección
     modelSelect.addEventListener('change', () => {
@@ -66,8 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 generationSpinner.style.display = 'none';
                 designContainer.style.display = 'block';
                 btnCompile.disabled = true;
+                btnAddSession.disabled = true;
                 btnCompile.innerHTML = 'IA Escribiendo...';
-                designEditor.value = data.result;
+                
+                // Concatena el diseño anterior con lo que está generando ahora
+                const newText = accumulatedDesign ? accumulatedDesign + "\n\n---\n\n" + data.result : data.result;
+                designEditor.value = newText;
+                
                 // Auto-scroll al final del textarea
                 designEditor.scrollTop = designEditor.scrollHeight;
             }
@@ -77,13 +86,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.action === 'generate_design') {
                 generationSpinner.style.display = 'none';
                 designContainer.style.display = 'block';
-                designEditor.value = data.result.trim();
+                
+                const finalNewText = accumulatedDesign ? accumulatedDesign + "\n\n---\n\n" + data.result.trim() : data.result.trim();
+                designEditor.value = finalNewText;
+                accumulatedDesign = finalNewText; // Guardar el acumulado final
+                
                 btnCompile.disabled = false;
-                btnCompile.innerHTML = 'Paso 2: Confirmar Diseño y Compilar';
+                btnAddSession.disabled = false;
+                btnCompile.innerHTML = 'Paso Final: Confirmar y Compilar';
             } else if (data.action === 'generate_json') {
                 generationSpinner.style.display = 'none';
                 designContainer.style.display = 'block';
                 btnCompile.style.display = 'none';
+                btnAddSession.style.display = 'none';
                 
                 try {
                     let jsonText = data.result.trim();
@@ -103,6 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                 } catch (err) {
                     btnCompile.style.display = 'inline-flex';
+                    btnAddSession.style.display = 'inline-flex';
                     btnCompile.disabled = false;
                     btnCompile.innerHTML = 'Reintentar Compilación';
                     compileError.style.display = 'block';
@@ -121,24 +137,45 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btnGenerate.disabled) btnGenerate.disabled = false;
             if (btnCompile.disabled) {
                 btnCompile.disabled = false;
-                btnCompile.innerHTML = 'Paso 2: Confirmar Diseño y Compilar';
+                btnCompile.innerHTML = 'Paso Final: Confirmar y Compilar';
             }
+            if (btnAddSession.disabled) btnAddSession.disabled = false;
         }
     });
 
     btnGenerate.addEventListener('click', () => {
         const text = saInput.value.trim();
-        if (!text) return alert('Por favor, introduce la Situación de Aprendizaje.');
+        if (!text) return alert('Por favor, introduce el fragmento de la Situación de Aprendizaje.');
         
         btnGenerate.disabled = true;
         outputSection.style.display = 'block';
         generationSpinner.style.display = 'flex';
-        spinnerText.textContent = 'Analizando la SA y diseñando el proyecto...';
+        spinnerText.textContent = 'Analizando la sesión y diseñando el proyecto...';
         designContainer.style.display = 'none';
         btnDownload.style.display = 'none';
         compileError.style.display = 'none';
         
+        // Actualizamos accumulatedDesign por si el usuario editó a mano el textarea antes de darle a generar la siguiente
+        if (designEditor.value.trim() !== '') {
+            accumulatedDesign = designEditor.value.trim();
+        }
+        
         worker.postMessage({ action: 'generate_design', text });
+    });
+
+    btnAddSession.addEventListener('click', () => {
+        sessionCount++;
+        saInputLabel.textContent = `Pega el siguiente fragmento (Ej: Sesión ${sessionCount}):`;
+        saInput.value = '';
+        saInput.placeholder = `Pega aquí las actividades o saberes de la Sesión ${sessionCount}...`;
+        btnGenerate.disabled = false;
+        btnGenerate.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Diseñar Sesión ${sessionCount}`;
+        
+        // Actualizar el acumulador con cualquier edición manual del usuario
+        accumulatedDesign = designEditor.value.trim();
+        
+        // Scroll hacia arriba para que pegue el texto
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
     btnCompile.addEventListener('click', () => {
@@ -146,10 +183,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!designText) return alert('El diseño no puede estar vacío.');
         
         btnCompile.disabled = true;
-        btnCompile.innerHTML = 'Generando JSON...';
+        btnAddSession.disabled = true;
+        btnCompile.innerHTML = 'Generando JSON de compilación...';
         designContainer.style.display = 'none';
         generationSpinner.style.display = 'flex';
-        spinnerText.textContent = 'Traduciendo el diseño a código JSON de eXeLearning...';
+        spinnerText.textContent = 'Traduciendo todas las sesiones a código JSON de eXeLearning. Esto puede tardar un poco...';
         
         worker.postMessage({ action: 'generate_json', designText });
     });
