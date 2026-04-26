@@ -13,8 +13,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const outputSection = document.getElementById('output-section');
     const generationSpinner = document.getElementById('generation-spinner');
-    const markdownOutput = document.getElementById('markdown-output');
+    const spinnerText = document.getElementById('spinner-text');
+    const designContainer = document.getElementById('design-container');
+    const designEditor = document.getElementById('design-editor');
+    const btnCompile = document.getElementById('btn-compile');
     const btnDownload = document.getElementById('btn-download');
+    const compileError = document.getElementById('compile-error');
 
     let worker = new Worker('worker.js', { type: 'module' });
     let isModelLoaded = false;
@@ -58,34 +62,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (data.status === 'complete') {
-            generationSpinner.style.display = 'none';
-            markdownOutput.style.display = 'block';
-            
-            try {
-                // Parsear la respuesta estricta en JSON
-                let jsonText = data.result.trim();
-                // Limpiar posibles bloques markdown de código si el LLM se saltó la regla
-                if (jsonText.startsWith('```json')) {
-                    jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
+            if (data.action === 'generate_design') {
+                generationSpinner.style.display = 'none';
+                designContainer.style.display = 'block';
+                designEditor.value = data.result.trim();
+                btnCompile.disabled = false;
+                btnCompile.innerHTML = 'Paso 2: Confirmar Diseño y Compilar';
+            } else if (data.action === 'generate_json') {
+                generationSpinner.style.display = 'none';
+                designContainer.style.display = 'block';
+                btnCompile.style.display = 'none';
+                
+                try {
+                    let jsonText = data.result.trim();
+                    if (jsonText.startsWith('```json')) {
+                        jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
+                    }
+                    if (jsonText.startsWith('```')) {
+                        jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
+                    }
+                    
+                    const pagesData = JSON.parse(jsonText);
+                    
+                    // Compilar
+                    currentProjectBlob = await compileExeProject(pagesData);
+                    btnDownload.style.display = 'inline-flex';
+                    compileError.style.display = 'none';
+                    
+                } catch (err) {
+                    btnCompile.style.display = 'inline-flex';
+                    btnCompile.disabled = false;
+                    btnCompile.innerHTML = 'Reintentar Compilación';
+                    compileError.style.display = 'block';
+                    compileError.innerHTML = `<strong>Error parseando el JSON de la IA:</strong><br>${err.message}<br><br>Si el problema persiste, edita el diseño y vuelve a intentarlo.`;
+                    console.error("Salida bruta de JSON:", data.result);
                 }
-                
-                const projectData = JSON.parse(jsonText);
-                
-                // Mostrar el diseño pedagógico en pantalla
-                markdownOutput.innerHTML = marked.parse(projectData.design_markdown);
-                
-                // Compilar el archivo .elpx
-                btnDownload.style.display = 'none';
-                markdownOutput.innerHTML += '<p><em>Compilando archivo .elpx con JSZip...</em></p>';
-                
-                currentProjectBlob = await compileExeProject(projectData.pages);
-                
-                btnDownload.style.display = 'inline-flex';
-                
-            } catch (err) {
-                markdownOutput.innerHTML = `<div style="color: #ef4444; padding: 1rem; border: 1px solid #ef4444; border-radius: 0.5rem;">
-                    <strong>Error parseando la salida de la IA:</strong><br>${err.message}<br><br>Salida bruta:<br><pre>${data.result}</pre>
-                </div>`;
             }
         }
 
@@ -94,7 +105,12 @@ document.addEventListener('DOMContentLoaded', () => {
             statusDot.className = 'dot offline';
             statusText.textContent = 'Error';
             generationSpinner.style.display = 'none';
-            btnGenerate.disabled = false;
+            designContainer.style.display = 'block';
+            if (btnGenerate.disabled) btnGenerate.disabled = false;
+            if (btnCompile.disabled) {
+                btnCompile.disabled = false;
+                btnCompile.innerHTML = 'Paso 2: Confirmar Diseño y Compilar';
+            }
         }
     });
 
@@ -105,10 +121,25 @@ document.addEventListener('DOMContentLoaded', () => {
         btnGenerate.disabled = true;
         outputSection.style.display = 'block';
         generationSpinner.style.display = 'flex';
-        markdownOutput.style.display = 'none';
+        spinnerText.textContent = 'Analizando la SA y diseñando el proyecto...';
+        designContainer.style.display = 'none';
         btnDownload.style.display = 'none';
+        compileError.style.display = 'none';
         
-        worker.postMessage({ action: 'generate', text });
+        worker.postMessage({ action: 'generate_design', text });
+    });
+
+    btnCompile.addEventListener('click', () => {
+        const designText = designEditor.value.trim();
+        if (!designText) return alert('El diseño no puede estar vacío.');
+        
+        btnCompile.disabled = true;
+        btnCompile.innerHTML = 'Generando JSON...';
+        designContainer.style.display = 'none';
+        generationSpinner.style.display = 'flex';
+        spinnerText.textContent = 'Traduciendo el diseño a código JSON de eXeLearning...';
+        
+        worker.postMessage({ action: 'generate_json', designText });
     });
 
     btnDownload.addEventListener('click', () => {

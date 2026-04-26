@@ -14,43 +14,47 @@ console.warn = function(...args) {
 
 let generator = null;
 
-const SYSTEM_PROMPT = `Eres un Diseñador Instruccional y Arquitecto de Software especializado en eXeLearning v4 y metodologías LOMLOE. 
+const SYSTEM_PROMPT_DESIGN = `Eres un Diseñador Instruccional experto en eXeLearning v4 y metodologías LOMLOE. 
 Se te proporcionará una Situación de Aprendizaje (SA). 
+Tienes a tu disposición estos iDevices: text, casestudy, digcompedu, download-source-file, external-website, image-gallery, udl-content, checklist, form, guess, interactive-video, progress-report, select-media-files, rubric.
 
-Tienes a tu disposición estos 14 iDevices: text, casestudy, digcompedu, download-source-file, external-website, image-gallery, udl-content, checklist, form, guess, interactive-video, progress-report, select-media-files, rubric.
+Tu tarea es generar el diseño pedagógico detallado en formato Markdown.
+DEBES INCLUIR:
+1. Árbol de Navegación propuesto.
+2. Orientaciones para el Docente (justificando los iDevices elegidos según los saberes).
+3. Guía paso a paso para el alumno (mencionando explícitamente los nombres técnicos de los iDevices como 'Caso Práctico', 'Adivina', 'Rúbrica', etc.).
+No generes ningún código JSON, solo el texto Markdown.`;
 
-Tu tarea es generar un archivo JSON estricto con el siguiente formato exacto (NO escribas nada más que el JSON):
-{
-  "design_markdown": "### Árbol de Navegación... \n\n### Para el Docente...\n\n### Misión para el Alumno...",
-  "pages": [
-    {
-      "page_name": "Nombre de la página",
-      "idevices": [
-        {
-          "type": "text",
-          "content": {
-            "text": "<p>Contenido HTML aquí</p>"
-          }
-        },
-        {
-          "type": "casestudy",
-          "content": {
-            "history": "<p>Historia del caso</p>",
-            "activities": [{"activity": "<p>Act 1</p>", "feedback": "<p>Feed</p>", "buttonCaption": "Mostrar"}]
-          }
+const SYSTEM_PROMPT_JSON = `Eres un Arquitecto de Software especializado en eXeLearning v4.
+Tu tarea es generar un archivo JSON estricto que mapee exactamente el Diseño Pedagógico que te proporcionará el usuario.
+
+FORMATO EXACTO DEL JSON (debe ser un array de páginas):
+[
+  {
+    "page_name": "Nombre de la página",
+    "idevices": [
+      {
+        "type": "text",
+        "content": { "text": "<p>Contenido HTML aquí</p>" }
+      },
+      {
+        "type": "casestudy",
+        "content": {
+          "history": "<p>Historia del caso</p>",
+          "activities": [{"activity": "<p>Act 1</p>", "feedback": "<p>Feed</p>", "buttonCaption": "Mostrar"}]
         }
-      ]
-    }
-  ]
-}
+      }
+    ]
+  }
+]
 
 REGLAS:
-1. En "design_markdown" redacta la justificación pedagógica y la guía paso a paso para el alumno mencionando los nombres de los iDevices.
-2. En "pages" crea el mapeo técnico. Usa solo los nombres internos de los iDevices listados. Adapta los "content" a los esquemas lógicos básicos de cada iDevice según tu conocimiento.
-3. Devuelve ÚNICAMENTE código JSON válido parseable. Sin bloques de código markdown alrededor.`;
+1. Usa solo estos nombres de tipo válidos: text, casestudy, digcompedu, download-source-file, external-website, image-gallery, udl-content, checklist, form, guess, interactive-video, progress-report, select-media-files, rubric.
+2. Adapta los "content" a la lógica de cada iDevice, rellenándolos con el contenido real inferido del diseño (las preguntas, los textos, la rúbrica).
+3. Devuelve ÚNICAMENTE el array JSON válido parseable. Ni una sola palabra más de texto fuera del JSON. Sin bloques \`\`\`json.`;
 
 self.addEventListener('message', async (event) => {
-    const { action, modelName, text } = event.data;
+    const { action, modelName, text, designText } = event.data;
 
     if (action === 'load') {
         try {
@@ -90,37 +94,36 @@ self.addEventListener('message', async (event) => {
         }
     }
 
-    if (action === 'generate') {
+    if (action === 'generate_design' || action === 'generate_json') {
         try {
             if (!generator) throw new Error("El modelo no está cargado");
 
-            const messages = [
-                { role: "system", content: SYSTEM_PROMPT },
-                { role: "user", content: "Genera el proyecto eXeLearning para la siguiente SA:\n\n" + text }
-            ];
-
-            const textStreamer = {
-                put: (chunk) => {
-                    // No usamos streaming letra a letra para no romper el parser JSON de la UI
-                },
-                end: () => {}
-            };
+            let messages = [];
+            if (action === 'generate_design') {
+                messages = [
+                    { role: "system", content: SYSTEM_PROMPT_DESIGN },
+                    { role: "user", content: "Genera el diseño para la siguiente SA:\n\n" + text }
+                ];
+            } else {
+                messages = [
+                    { role: "system", content: SYSTEM_PROMPT_JSON },
+                    { role: "user", content: "Genera el JSON estricto para este diseño aprobado:\n\n" + designText }
+                ];
+            }
 
             const result = await generator(messages, {
-                max_new_tokens: 3000,
+                max_new_tokens: 3500,
                 temperature: 0.2,
                 do_sample: true
             });
 
             // Extraer el texto generado
             let generatedText = result[0].generated_text;
-            
-            // Si el modelo devolvió los mensajes enteros, extraer solo el final
             if (Array.isArray(generatedText)) {
                 generatedText = generatedText[generatedText.length - 1].content;
             }
 
-            self.postMessage({ status: 'complete', result: generatedText });
+            self.postMessage({ status: 'complete', action: action, result: generatedText });
 
         } catch (error) {
             self.postMessage({ status: 'error', error: error.message });
